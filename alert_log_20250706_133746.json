@@ -1,0 +1,7 @@
+{"timestamp": 1751805222.427393, "alert_type": "unknown_face", "description": "Unknown person detected in exam room", "confidence": 0.0, "student_id": null, "frame_path": "alert_clips/unknown_face_20250706_133342.mp4"}
+{"timestamp": 1751805230.015877, "alert_type": "unknown_face", "description": "Unknown person detected in exam room", "confidence": 0.0, "student_id": null, "frame_path": "alert_clips/unknown_face_20250706_133350.mp4"}
+{"timestamp": 1751805235.6934242, "alert_type": "head_turn", "description": "Excessive head turning: -63.3\u00b0", "confidence": 0.7029087205535719, "student_id": null, "frame_path": "alert_clips/head_turn_20250706_133355.mp4"}
+{"timestamp": 1751805239.3918662, "alert_type": "unknown_face", "description": "Unknown person detected in exam room", "confidence": 0.0, "student_id": null, "frame_path": "alert_clips/unknown_face_20250706_133359.mp4"}
+{"timestamp": 1751805241.450007, "alert_type": "head_turn", "description": "Excessive head turning: 32.2\u00b0", "confidence": 0.3579856484312847, "student_id": null, "frame_path": "alert_clips/head_turn_20250706_133401.mp4"}
+{"timestamp": 1751805245.144455, "alert_type": "unknown_face", "description": "Unknown person detected in exam room", "confidence": 0.0, "student_id": null, "frame_path": "alert_clips/unknown_face_20250706_133405.mp4"}
+{"timestamp": 1751805249.033466, "alert_type": "prohibited_object", "description": "Prohibited object detected: cell phone", "confidence": 

@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Exam Monitor Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Enhanced dashboard layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+            border: 1px solid #e1e8ed;
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        /* Video feed with overlay for student info */
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .video-feed {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.1rem;
+            position: relative;
+        }
+
+        .video-feed img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #ccc;
+        }
+
+        .video-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Student detection overlay */
+        .student-overlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            max-width: 250px;
+            z-index: 10;
+        }
+
+        .student-info {
+            margin-bottom: 0.5rem;
+        }
+
+        .student-name {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 0.25rem;
+        }
+
+        .student-id {
+            color: #ccc;
+            font-size: 0.8rem;
+        }
+
+        .confidence-score {
+            color: #FFD700;
+            font-size: 0.8rem;
+        }
+
+        /* Detection indicators */
+        .detection-indicators {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            display: flex;
+            gap: 0.5rem;
+            z-index: 10;
+        }
+
+        .indicator {
+            padding: 0.25rem 0.5rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .face-detected {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .phone-detected {
+            background: #FF5722;
+            color: white;
+            animation: blink 1s infinite;
+        }
+
+        .speaking-detected {
+            background: #FF9800;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-active {
+            background: #28a745;
+            animation: pulse-status 2s infinite;
+        }
+
+        .status-inactive {
+            background: #6c757d;
+        }
+
+        @keyframes pulse-status {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Enhanced alerts container */
+        .alerts-container {
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 1rem;
+            background: #f8f9fa;
+        }
+
+        .alert-item {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid #ffc107;
+            position: relative;
+        }
+
+        .alert-item.warning {
+            border-left-color: #ffc107;
+        }
+
+        .alert-item.danger {
+            border-left-color: #dc3545;
+        }
+
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .alert-student {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .alert-student-name {
+            font-weight: bold;
+            color: #333;
+            font-size: 1rem;
+        }
+
+        .alert-student-id {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        .alert-time {
+            font-size: 0.8rem;
+            color: #6c757d;
+            text-align: right;
+        }
+
+        .alert-type {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .alert-description {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .alert-confidence {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: #e9ecef;
+            color: #495057;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .no-alerts {
+            text-align: center;
+            color: #6c757d;
+            padding: 2rem;
+        }
+
+        /* Student database section */
+        .student-database {
+            grid-column: 1 / -1;
+            margin-top: 2rem;
+        }
+
+        .student-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .student-card {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            transition: transform 0.2s ease;
+        }
+
+        .student-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .student-photo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #f8f9fa;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: #6c757d;
+        }
+
+        .student-card-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .student-card-id {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .online-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+            display: inline-block;
+            margin-left: 0.5rem;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: border-color 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        /* Responsive design */
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .video-container {
+                height: 400px;
+            }
+            
+            .alerts-container {
+                height: 300px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .video-container {
+                height: 300px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .student-list {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>AI Exam Monitor Dashboard</h1>
+            <div class="user-info">
+                <span>Welcome, {{ username }}</span>
+                <a href="/logout" class="logout-btn">Logout</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number" id="alerts-count">0</div>
+                <div class="stat-label">Total Alerts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="students-detected">0</div>
+                <div class="stat-label">Students Detected</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="monitoring-status">
+                    <span class="status-indicator status-inactive"></span>
+                    Inactive
+                </div>
+                <div class="stat-label">System Status</div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2>Live Video Feed</h2>
+                <div class="video-container">
+                    <div class="video-feed" id="video-feed">
+                        <div class="video-placeholder">
+                            <div>📹</div>
+                            <div>Camera feed will appear here when monitoring starts</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Student overlay -->
+                    <div class="student-overlay" id="student-overlay" style="display: none;">
+                        <div class="student-info">
+                            <div class="student-name" id="detected-student-name">Unknown Student</div>
+                            <div class="student-id" id="detected-student-id">ID: N/A</div>
+                            <div class="confidence-score" id="confidence-score">Confidence: 0%</div>
+                        </div>
+                    </div>
+
+                    <!-- Detection indicators -->
+                    <div class="detection-indicators" id="detection-indicators">
+                        <div class="indicator face-detected" id="face-indicator" style="display: none;">Face Detected</div>
+                        <div class="indicator phone-detected" id="phone-indicator" style="display: none;">Phone Detected</div>
+                        <div class="indicator speaking-detected" id="speaking-indicator" style="display: none;">Speaking</div>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button class="btn btn-primary" id="start-btn" onclick="startMonitoring()">
+                        Start Monitoring
+                    </button>
+                    <button class="btn btn-danger" id="stop-btn" onclick="stopMonitoring()" disabled>
+                        Stop Monitoring
+                    </button>
+                    <button class="btn btn-secondary" id="manage-students-btn" onclick="toggleStudentDatabase()">
+                        Manage Students
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Real-time Alerts</h2>
+                <div class="alerts-container" id="alerts-container">
+                    <div class="no-alerts">No alerts yet. Start monitoring to see alerts here.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Student Database Section -->
+        <div class="card student-database" id="student-database" style="display: none;">
+            <h2>Student Database</h2>
+            <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+                <div>📁 Click to upload student photos or drag and drop</div>
+                <div style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">
+                    Supported formats: JPG, PNG, GIF (Max 5MB per file)
+                </div>
+            </div>
+            <input type="file" id="file-input" multiple accept="image/*" style="display: none;" onchange="handleFileUpload(event)">
+            
+            <div class="student-list" id="student-list">
+                <!-- Student cards will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let monitoringActive = false;
+        let alertsCount = 0;
+        let studentsDetected = 0;
+        let studentDatabase = [];
+        let currentDetectedStudent = null;
+
+        // Socket event handlers
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+
+        socket.on('video_frame', function(data) {
+            const videoFeed = document.getElementById('video-feed');
+            videoFeed.innerHTML = `<img src="data:image/jpeg;base64,${data.frame}" alt="Video Feed">`;
+            
+            // Update detection indicators
+            updateDetectionIndicators(data.detections || {});
+            
+            // Update student overlay if student is detected
+            if (data.student_info) {
+                updateStudentOverlay(data.student_info);
+            } else {
+                hideStudentOverlay();
+            }
+        });
+
+        socket.on('new_alert', function(data) {
+            addAlert(data);
+            updateAlertsCount();
+        });
+
+        socket.on('student_detected', function(data) {
+            updateStudentOverlay(data);
+            updateStudentsDetected();
+        });
+
+        function startMonitoring() {
+            fetch('/api/start_monitoring', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    monitoringActive = true;
+                    updateUI();
+                    showNotification('Monitoring started successfully', 'success');
+                } else {
+                    showNotification(data.error || 'Failed to start monitoring', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Error starting monitoring', 'error');
+            });
+        }
+
+        function stopMonitoring() {
+            fetch('/api/stop_monitoring', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    monitoringActive = false;
+                    updateUI();
+                    showNotification('Monitoring stopped', 'info');
+                    // Clear video feed and overlays
+                    document.getElementById('video-feed').innerHTML = 
+                        '<div class="video-placeholder"><div>📹</div><div>Camera feed will appear here when monitoring starts</div></div>';
+                    hideStudentOverlay();
+                    hideDetectionIndicators();
+                } else {
+                    showNotification(data.error || 'Failed to stop monitoring', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Error stopping monitoring', 'error');
+            });
+        }
+
+        function updateUI() {
+            const startBtn = document.getElementById('start-btn');
+            const stopBtn = document.getElementById('stop-btn');
+            const statusElement = document.getElementById('monitoring-status');
+
+            if (monitoringActive) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusElement.innerHTML = '<span class="status-indicator status-active"></span>Active';
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                statusElement.innerHTML = '<span class="status-indicator status-inactive"></span>Inactive';
+            }
+        }
+
+        function updateDetectionIndicators(detections) {
+            const faceIndicator = document.getElementById('face-indicator');
+            const phoneIndicator = document.getElementById('phone-indicator');
+            const speakingIndicator = document.getElementById('speaking-indicator');
+
+            faceIndicator.style.display = detections.face ? 'block' : 'none';
+            phoneIndicator.style.display = detections.phone ? 'block' : 'none';
+            speakingIndicator.style.display = detections.speaking ? 'block' : 'none';
+        }
+
+        function hideDetectionIndicators() {
+            const indicators = document.querySelectorAll('.indicator');
+            indicators.forEach(indicator => {
+                indicator.style.display = 'none';
+            });
+        }
+
+        function updateStudentOverlay(studentInfo) {
+            const overlay = document.getElementById('student-overlay');
+            const nameElement = document.getElementById('detected-student-name');
+            const idElement = document.getElementById('detected-student-id');
+            const confidenceElement = document.getElementById('confidence-score');
+
+            nameElement.textContent = studentInfo.name || 'Unknown Student';
+            idElement.textContent = `ID: ${studentInfo.id || 'N/A'}`;
+            confidenceElement.textContent = `Confidence: ${Math.round(studentInfo.confidence * 100)}%`;
+
+            overlay.style.display = 'block';
+            currentDetectedStudent = studentInfo;
+        }
+
+        function hideStudentOverlay() {
+            document.getElementById('student-overlay').style.display = 'none';
+            currentDetectedStudent = null;
+        }
+
+        function addAlert(alertData) {
+            const alertsContainer = document.getElementById('alerts-container');
+            
+            // Remove "no alerts" message if it exists
+            const noAlertsMsg = alertsContainer.querySelector('.no-alerts');
+            if (noAlertsMsg) {
+                noAlertsMsg.remove();
+            }
+
+            // Create alert element
+            const alertElement = document.createElement('div');
+            alertElement.className = `alert-item ${alertData.severity || 'warning'}`;
+            alertElement.innerHTML = `
+                <div class="alert-header">
+                    <div class="alert-student">
+                        <div class="alert-student-name">${alertData.student_name || 'Unknown Student'}</div>
+                        <div class="alert-student-id">ID: ${alertData.student_id || 'N/A'}</div>
+                    </div>
+                    <div class="alert-time">${alertData.timestamp}</div>
+                </div>
+                <div class="alert-type">${alertData.type}</div>
+                <div class="alert-description">${alertData.description}</div>
+                <div class="alert-confidence">${Math.round((alertData.confidence || 0) * 100)}%</div>
+            `;
+
+            // Add to top of container
+            alertsContainer.insertBefore(alertElement, alertsContainer.firstChild);
+
+            // Keep only last 50 alerts
+            const alerts = alertsContainer.querySelectorAll('.alert-item');
+            if (alerts.length > 50) {
+                alerts[alerts.length - 1].remove();
+            }
+
+            // Auto-scroll to top
+            alertsContainer.scrollTop = 0;
+        }
+
+        function updateAlertsCount() {
+            alertsCount++;
+            document.getElementById('alerts-count').textContent = alertsCount;
+        }
+
+        function updateStudentsDetected() {
+            studentsDetected++;
+            document.getElementById('students-detected').textContent = studentsDetected;
+        }
+
+        function toggleStudentDatabase() {
+            const database = document.getElementById('student-database');
+            const isVisible = database.style.display !== 'none';
+            database.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                loadStudentDatabase();
+            }
+        }
+
+        function loadStudentDatabase() {
+            fetch('/api/get_students')
+                .then(response => response.json())
+                .then(data => {
+                    studentDatabase = data.students || [];
+                    renderStudentList();
+                })
+                .catch(error => {
+                    console.error('Error loading students:', error);
+                });
+        }
+
+        function renderStudentList() {
+            const studentList = document.getElementById('student-list');
+            studentList.innerHTML = '';
+
+            if (studentDatabase.length === 0) {
+                studentList.innerHTML = '<div style="text-align: center; color: #666; padding: 2rem;">No students registered yet. Upload photos to get started.</div>';
+                return;
+            }
+
+            studentDatabase.forEach(student => {
+                const studentCard = document.createElement('div');
+                studentCard.className = 'student-card';
+                studentCard.innerHTML = `
+                    <div class="student-photo">
+                        ${student.photo ? `<img src="${student.photo}" alt="${student.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">` : '👤'}
+                    </div>
+                    <div class="student-card-name">${student.name}${student.online ? '<span class="online-indicator"></span>' : ''}</div>
+                    <div class="student-card-id">${student.id}</div>
+                `;
+                studentList.appendChild(studentCard);
+            });
+        }
+
+        function handleFileUpload(event) {
+            const files = event.target.files;
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('photos', files[i]);
+            }
+
+            fetch('/api/upload_students', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`Successfully uploaded ${data.count} student photos`, 'success');
+                    loadStudentDatabase();
+                } else {
+                    showNotification(data.error || 'Failed to upload photos', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading photos:', error);
+                showNotification('Error uploading photos', 'error');
+            });
+        }
+
+        function showNotification(message, type) {
+            // Enhanced notification system
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                color: white;
+                font-weight: 500;
+                z-index: 1000;
+                transition: opacity 0.3s ease;
+            `;
+
+            switch (type) {
+                case 'success':
+                    notification.style.background = '#28a745';
+                    break;
+                case 'error':
+                    notification.style.background = '#dc3545';
+                    break;
+                case 'info':
+                    notification.style.background = '#17a2b8';
+                    break;
+                default:
+                    notification.style.background = '#ffc107';
+                    notification.style.color = '#333';
+            }
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+
+        // Drag and drop functionality
+        const uploadArea = document.getElementById('upload-area');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const fileInput = document.getElementById('file-input');
+                fileInput.files = files;
+                handleFileUpload({ target: fileInput });
+            }
+        });
+
+        // Check status on page load
+        fetch('/api/monitoring_status')
+            .then(response => response.json())
+            .then(data => {
+                monitoringActive = data.active;
+                alertsCount = data.alerts_count;
+                studentsDetected = data.students_detected || 0;
+                updateUI();
+                document.getElementById('alerts-count').textContent = alertsCount;
+                document.getElementById('students-detected').textContent = studentsDetected;
+            })
+            .catch(error => {
+                console.error('Error checking status:', error);
+            });
+    </script>
+</body>
+</html>

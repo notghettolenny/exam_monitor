@@ -1,0 +1,4 @@
+{"timestamp": 1751806284.615996, "alert_type": "unknown_face", "description": "Unknown person detected in exam room", "confidence": 0.0, "student_id": null, "frame_path": "alert_clips/unknown_face_20250706_135124.mp4"}
+{"timestamp": 1751806292.444393, "alert_type": "unknown_face", "description": "Unknown person detected in exam room", "confidence": 0.0, "student_id": null, "frame_path": "alert_clips/unknown_face_20250706_135132.mp4"}
+{"timestamp": 1751806298.275224, "alert_type": "unknown_face", "description": "Unknown person detected in exam room", "confidence": 0.0, "student_id": null, "frame_path": "alert_clips/unknown_face_20250706_135138.mp4"}
+{"timestamp": 1751806302.116673, "alert_type": "prohibited_object", "description": "Prohibited object detected: cell phone", "confidence": 
