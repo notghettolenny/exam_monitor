@@ -1,31 +1,32 @@
 # 🎓 exam\_monitor
 
-![Django](https://img.shields.io/badge/built%20with-Django-092E20?style=flat\&logo=django\&logoColor=white)
+![Python](https://img.shields.io/badge/built%20with-Python-3776AB?style=flat\&logo=python\&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-A robust web application for managing and monitoring exams — online or in-person.
-It allows administrators to schedule exams, enroll students, assign proctors, and monitor sessions seamlessly.
+An intelligent Python-based exam monitoring system that combines face recognition, YOLO object detection, and a GUI to track students, record attendance, and raise alerts during exams.
 
 ---
 
 ## ✨ Features
 
-✅ Secure user authentication and role-based access (Admin, Proctor, Student)
-✅ Create and manage exam sessions with ease
-✅ Enroll students and assign them to specific sessions
-✅ Assign proctors to monitor exams
-✅ Track student activity and monitor session progress
-✅ Generate reports of completed sessions
+✅ Face recognition for student identification
+✅ YOLO-based detection for enhanced monitoring
+✅ GUI for managing sessions and real-time monitoring
+✅ Logs attendance and alerts to JSON/text files
+✅ Stores student data and session photos
+✅ Easy to extend and customize
 
 ---
 
 ## 🏗️ Tech Stack
 
-| Layer        | Technology                                             |
-| ------------ | ------------------------------------------------------ |
-| **Backend**  | [Django](https://www.djangoproject.com/)               |
-| **Frontend** | Django Templates + Bootstrap (optional)                |
-| **Database** | SQLite (default) — can be swapped for PostgreSQL/MySQL |
+| Layer                | Technology                   |
+| -------------------- | ---------------------------- |
+| **Language**         | Python 3                     |
+| **Machine Learning** | YOLOv5, face\_recognition    |
+| **GUI**              | Tkinter (or similar)  |
+| **Data Storage**     | `.db`, `.pkl` files          |
+| **Dependencies**     | Listed in `requirements.txt` |
 
 ---
 
@@ -33,14 +34,22 @@ It allows administrators to schedule exams, enroll students, assign proctors, an
 
 ```
 exam_monitor/
-├── authentication/      # User authentication & roles
-├── exam_sessions/        # Exam session management
-├── proctors/             # Proctor assignment & tracking
-├── students/             # Student enrollment & profiles
-├── static/               # Static assets (CSS, JS, images)
-├── templates/            # HTML templates
-├── exam_monitor/         # Project settings & URLs
-├── manage.py
+├── app.py
+├── run.py
+├── enroll_students.py
+├── exam_monitor_gui.py
+├── exam_monitor_system.py
+├── enhanced_detector.py
+├── test_face_recognition_debug.py
+├── requirements.txt
+├── templates/                 # GUI or HTML templates
+├── static/student_photos/     # Captured student photos
+├── student_photos/            # Additional photo storage
+├── users.db                   # User database
+├── students.pkl               # Pickled student data
+├── yolov5s.pt                 # YOLOv5 model weights
+├── alert_log_*.json           # Alert logs
+├── attendance_log.txt         # Attendance records
 ```
 
 ---
@@ -51,52 +60,52 @@ exam_monitor/
 
 * Python 3.8+
 * pip
-* virtualenv (recommended)
+* virtualenv (optional but recommended)
+* GPU (optional, for faster YOLO inference)
 
 ---
 
 ### ⚙️ Installation
 
+1️⃣ Clone the repository:
+
 ```bash
-# Clone the repository
 git clone https://github.com/notghettolenny/exam_monitor.git
-
 cd exam_monitor
-
-# Set up virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py migrate
-
-# Create an admin user
-python manage.py createsuperuser
-
-# Start the development server
-python manage.py runserver
 ```
 
-Visit [http://127.0.0.1:8000/](http://127.0.0.1:8000/) to see it in action!
+2️⃣ Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3️⃣ Run the application:
+
+```bash
+python3 app.py
+```
+
+(or use `exam_monitor_gui.py` if it has the main GUI)
 
 ---
 
-## 👤 User Roles
+## 📄 Logs & Data
 
-| Role        | Permissions                                  |
-| ----------- | -------------------------------------------- |
-| **Admin**   | Full access: manage sessions, users, reports |
-| **Proctor** | Monitor assigned exam sessions               |
-| **Student** | Participate in assigned exams                |
+* Attendance logs → `attendance_log.txt`
+* Alerts → `alert_log_*.json`
+* Student photos → `static/student_photos/`
+* Model weights → `yolov5s.pt`
 
 ---
 
-## 📄 License
+## 👥 User Roles
 
-This project is licensed under the [MIT License](LICENSE).
+| Role        | Description                |
+| ----------- | -------------------------- |
+| **Admin**   | Runs & supervises sessions |
+| **Proctor** | Monitors students          |
+| **Student** | Identified and tracked     |
 
 ---
 
@@ -105,14 +114,24 @@ This project is licensed under the [MIT License](LICENSE).
 Contributions, issues, and feature requests are welcome!
 
 * Fork the repo
-* Create your feature branch (`git checkout -b feature/your-feature`)
-* Commit your changes
-* Push to the branch (`git push origin feature/your-feature`)
+* Create a feature branch (`git checkout -b feature/your-feature`)
+* Commit & push your changes
 * Open a Pull Request
 
 ---
 
 ## 📬 Contact
 
-For questions or feedback, feel free to reach out via [GitHub Issues](https://github.com/notghettolenny/exam_monitor/issues).
+For questions or feedback, open an [issue](https://github.com/notghettolenny/exam_monitor/issues).
+
+---
+
+### 🔗 Notes
+
+* Make sure `yolov5s.pt` is present in the root folder.
+* Ensure your camera is properly configured if running face recognition.
+* Logs and captured photos are saved automatically during a session.
+
+---
+
 
