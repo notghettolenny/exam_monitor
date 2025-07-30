@@ -22,6 +22,10 @@ class ExamMonitorGUI:
 
         self.running = False
         self.cap = None
+        self.current_frame = None
+        # Performance tuning for smoother video display
+        self.frame_interval = 50  # milliseconds between GUI frame updates (~20 FPS)
+        self.display_scale = 0.5  # scale factor for GUI preview
 
     def setup_ui(self):
         title = tk.Label(self.root, text="AI Exam Monitoring Dashboard", font=("Helvetica", 18), bg="#f0f0f0")
@@ -50,6 +54,9 @@ class ExamMonitorGUI:
             self.running = True
             self.status_label.config(text="Status: Monitoring", fg="green")
             self.cap = cv2.VideoCapture(0)
+            # Set a modest resolution to reduce CPU usage
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.monitor_thread = threading.Thread(target=self.monitor_loop, daemon=True)
             self.monitor_thread.start()
             self.update_video()
@@ -71,15 +78,19 @@ class ExamMonitorGUI:
             self.current_frame = frame.copy()
 
     def update_video(self):
-        if self.running and self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if ret:
-                cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(cv2image)
-                imgtk = ImageTk.PhotoImage(image=img)
-                self.video_label.imgtk = imgtk
-                self.video_label.config(image=imgtk)
-        self.root.after(30, self.update_video)
+        if self.running and self.current_frame is not None:
+            display_frame = cv2.resize(
+                self.current_frame,
+                None,
+                fx=self.display_scale,
+                fy=self.display_scale,
+            )
+            cv2image = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(cv2image)
+            imgtk = ImageTk.PhotoImage(image=img)
+            self.video_label.imgtk = imgtk
+            self.video_label.config(image=imgtk)
+        self.root.after(self.frame_interval, self.update_video)
 
     def schedule_alert_update(self):
         self.update_alert_display()
