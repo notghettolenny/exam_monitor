@@ -17,6 +17,8 @@ import io
 import mediapipe as mp
 import math
 from collections import deque
+import torch
+from facenet_pytorch import MTCNN
 
 # Import the enhanced detector
 from enhanced_detector import EnhancedDetector
@@ -38,6 +40,7 @@ cap = None
 current_detected_student = None
 student_encodings_cache = []
 enhanced_detector = None
+mtcnn_detector = None
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
@@ -202,14 +205,17 @@ student_manager = StudentManager()
 
 def detect_student_in_frame(frame):
     """Detect and identify student in frame using face recognition"""
-    global student_encodings_cache, current_detected_student
-    
+    global student_encodings_cache, current_detected_student, mtcnn_detector
+
     try:
         # Convert BGR to RGB
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Find face locations and encodings
-        face_locations = face_recognition.face_locations(rgb_frame)
+
+        boxes, _ = mtcnn_detector.detect(rgb_frame)
+        if boxes is None:
+            current_detected_student = None
+            return None
+        face_locations = [(int(y1), int(x2), int(y2), int(x1)) for x1, y1, x2, y2 in boxes]
         face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
         
         if not face_encodings:
@@ -270,9 +276,11 @@ def detect_multiple_faces_in_frame(frame):
     """Detect multiple faces in frame"""
     try:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        face_locations = face_recognition.face_locations(rgb_frame)
-        return len(face_locations) > 1
-    except:
+        boxes, _ = mtcnn_detector.detect(rgb_frame)
+        if boxes is None:
+            return False
+        return len(boxes) > 1
+    except Exception:
         return False
 
 @app.route('/')
@@ -314,16 +322,18 @@ def start_monitoring():
     if 'username' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    global monitoring_active, video_thread, cap, student_encodings_cache, enhanced_detector
+    global monitoring_active, video_thread, cap, student_encodings_cache, enhanced_detector, mtcnn_detector
     
     try:
         # Load student encodings for recognition
         student_encodings_cache = student_manager.get_student_encodings()
         print(f"Loaded {len(student_encodings_cache)} student encodings")
         
-        # Initialize enhanced detector
+        # Initialize enhanced detector and MTCNN face detector
         enhanced_detector = EnhancedDetector()
-        print("Enhanced detector initialized")
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        mtcnn_detector = MTCNN(keep_all=True, device=device)
+        print("Enhanced detector and MTCNN initialized")
         
         # Start video capture
         cap = cv2.VideoCapture(0)
@@ -352,13 +362,14 @@ def stop_monitoring():
     if 'username' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    global monitoring_active, cap, current_detected_student
+    global monitoring_active, cap, current_detected_student, mtcnn_detector
     
     monitoring_active = False
     current_detected_student = None
     if cap:
         cap.release()
         cap = None
+    mtcnn_detector = None
     
     return jsonify({'success': True, 'message': 'Monitoring stopped'})
 
@@ -566,8 +577,11 @@ def video_processing_thread():
                     # Draw face detection boxes
                     try:
                         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        face_locations = face_recognition.face_locations(rgb_frame)
-                        
+                        boxes, _ = mtcnn_detector.detect(rgb_frame)
+                        face_locations = [] if boxes is None else [
+                            (int(y1), int(x2), int(y2), int(x1)) for x1, y1, x2, y2 in boxes
+                        ]
+
                         for (top, right, bottom, left) in face_locations:
                             # Draw rectangle around face
                             cv2.rectangle(display_frame, (left, top), (right, bottom), (0, 255, 0), 2)
@@ -707,7 +721,8 @@ def test_detection():
             test_results['head_movement'] = enhanced_detector.detect_head_movements(frame)
             test_results['object_near_ear'] = enhanced_detector.detect_object_near_ear(frame)
         
-        test_results['face_detection'] = len(face_recognition.face_locations(frame)) > 0
+        boxes, _ = mtcnn_detector.detect(frame)
+        test_results['face_detection'] = boxes is not None and len(boxes) > 0
         test_results['multiple_faces'] = detect_multiple_faces_in_frame(frame)
         test_results['student_detected'] = detect_student_in_frame(frame) is not None
         
