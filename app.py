@@ -273,13 +273,24 @@ def create_alert_with_student_info(alert_type, description, confidence=0.8):
     }
 
 def detect_multiple_faces_in_frame(frame):
-    """Detect multiple faces in frame"""
+    """Detect multiple faces in frame with confidence and size checks"""
     try:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        boxes, _ = mtcnn_detector.detect(rgb_frame)
-        if boxes is None:
+        boxes, probs = mtcnn_detector.detect(rgb_frame)
+        if boxes is None or probs is None:
             return False
-        return len(boxes) > 1
+
+        h, w = frame.shape[:2]
+        valid_detections = []
+        for (x1, y1, x2, y2), prob in zip(boxes, probs):
+            if prob is None or prob < 0.9:
+                continue
+            box_w, box_h = x2 - x1, y2 - y1
+            if box_w < w * 0.1 or box_h < h * 0.1:
+                continue
+            valid_detections.append((x1, y1, x2, y2))
+
+        return len(valid_detections) > 1
     except Exception:
         return False
 
@@ -343,7 +354,7 @@ def start_monitoring():
         # Set camera properties for better performance
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS, 30)
+        cap.set(cv2.CAP_PROP_FPS, 60)
         
         monitoring_active = True
         video_thread = threading.Thread(target=video_processing_thread)

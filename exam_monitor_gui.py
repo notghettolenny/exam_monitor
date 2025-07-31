@@ -24,7 +24,7 @@ class ExamMonitorGUI:
         self.cap = None
         self.current_frame = None
         # Performance tuning for smoother video display
-        self.frame_interval = 50  # milliseconds between GUI frame updates (~20 FPS)
+        self.frame_interval = 150  # milliseconds between GUI frame updates (~20 FPS)
         self.display_scale = 0.5  # scale factor for GUI preview
 
     def setup_ui(self):
