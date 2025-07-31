@@ -1,11 +1,10 @@
-
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 import threading
 import time
 import cv2
-from exam_monitor_system import ExamMonitorConfig, ExamMonitoringSystem
+from threaded_monitor import ThreadedMonitor
 
 class ExamMonitorGUI:
     def __init__(self):
@@ -16,16 +15,11 @@ class ExamMonitorGUI:
 
         self.setup_ui()
 
-        self.config = ExamMonitorConfig()
-        self.monitor = ExamMonitoringSystem(self.config)
-        self.monitor.setup()
-
+        self.monitor = ThreadedMonitor(display_scale=0.5)
         self.running = False
-        self.cap = None
-        self.current_frame = None
-        # Performance tuning for smoother video display
-        self.frame_interval = 150  # milliseconds between GUI frame updates (~20 FPS)
-        self.display_scale = 0.5  # scale factor for GUI preview
+
+        # GUI update interval (aiming for ~60 FPS = ~16ms per frame)
+        self.frame_interval = 16
 
     def setup_ui(self):
         title = tk.Label(self.root, text="AI Exam Monitoring Dashboard", font=("Helvetica", 18), bg="#f0f0f0")
@@ -53,43 +47,26 @@ class ExamMonitorGUI:
         if not self.running:
             self.running = True
             self.status_label.config(text="Status: Monitoring", fg="green")
-            self.cap = cv2.VideoCapture(0)
-            # Set a modest resolution to reduce CPU usage
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            self.monitor_thread = threading.Thread(target=self.monitor_loop, daemon=True)
-            self.monitor_thread.start()
+            self.monitor.start()
             self.update_video()
             self.schedule_alert_update()
 
     def stop_monitoring(self):
-        self.running = False
-        self.status_label.config(text="Status: Stopped", fg="red")
-        if self.cap:
-            self.cap.release()
-            self.cap = None
-
-    def monitor_loop(self):
-        while self.running and self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-            self.monitor.process_frame(frame)
-            self.current_frame = frame.copy()
+        if self.running:
+            self.running = False
+            self.status_label.config(text="Status: Stopped", fg="red")
+            self.monitor.stop()
 
     def update_video(self):
-        if self.running and self.current_frame is not None:
-            display_frame = cv2.resize(
-                self.current_frame,
-                None,
-                fx=self.display_scale,
-                fy=self.display_scale,
-            )
-            cv2image = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(cv2image)
-            imgtk = ImageTk.PhotoImage(image=img)
-            self.video_label.imgtk = imgtk
-            self.video_label.config(image=imgtk)
+        if self.running:
+            frame = self.monitor.get_latest_frame()
+            if frame is not None:
+                display_frame = cv2.resize(frame, None, fx=0.5, fy=0.5)
+                cv2image = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(cv2image)
+                imgtk = ImageTk.PhotoImage(image=img)
+                self.video_label.imgtk = imgtk
+                self.video_label.config(image=imgtk)
         self.root.after(self.frame_interval, self.update_video)
 
     def schedule_alert_update(self):
@@ -98,7 +75,7 @@ class ExamMonitorGUI:
             self.root.after(1000, self.schedule_alert_update)
 
     def update_alert_display(self):
-        alerts = self.monitor.alert_manager.get_recent_alerts()
+        alerts = self.monitor.detector.alert_manager.get_recent_alerts() if self.monitor else []
         self.alert_display.delete(0, 'end')
         for alert in alerts[-10:]:
             timestamp = time.strftime('%H:%M:%S', time.localtime(alert.timestamp))
