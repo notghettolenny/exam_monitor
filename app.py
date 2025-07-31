@@ -249,10 +249,13 @@ def detect_multiple_faces_in_frame(frame):
         return False
 
 def video_processing_thread():
-    global monitoring_active, threaded_monitor, current_detected_student, enhanced_detector
+    """Optimized threaded video processing loop."""
+    global monitoring_active, threaded_monitor, enhanced_detector, current_detected_student, mtcnn_detector, student_encodings_cache
 
     frame_count = 0
     detection_interval = 5
+    behavior_interval = 15
+    student_check_interval = 150
 
     while monitoring_active:
         try:
@@ -262,65 +265,82 @@ def video_processing_thread():
                 continue
 
             frame_count += 1
+            scaled = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)  # Downscale for detection
             alerts_to_send = []
 
+            # 🧠 Student recognition (every 5 frames)
             if frame_count % detection_interval == 0:
-                detected_student = detect_student_in_frame(frame)
-                if detected_student:
+                detected = detect_student_in_frame(scaled)
+                if detected:
                     socketio.emit('student_detected', {
-                        'name': detected_student['name'],
-                        'id': detected_student['id'],
-                        'confidence': detected_student['confidence']
+                        'name': detected['name'],
+                        'id': detected['id'],
+                        'confidence': detected['confidence']
                     })
 
-            if frame_count % 15 == 0 and enhanced_detector:
-                if enhanced_detector.detect_phone_in_frame(frame) or enhanced_detector.detect_object_near_ear(frame):
-                    alerts_to_send.append(create_alert_with_student_info('phone_detected', 'Phone or mobile device detected', 0.85))
-                if enhanced_detector.detect_speaking_in_frame(frame):
-                    alerts_to_send.append(create_alert_with_student_info('talking_detected', 'Talking or mouth movement detected during exam', 0.75))
-                if enhanced_detector.detect_hand_movements(frame):
-                    alerts_to_send.append(create_alert_with_student_info('hand_movement_detected', 'Suspicious hand movements detected', 0.70))
-                if enhanced_detector.detect_head_movements(frame):
-                    alerts_to_send.append(create_alert_with_student_info('head_movement_detected', 'Excessive head movement detected (looking around)', 0.65))
-                if detect_multiple_faces_in_frame(frame):
-                    alerts_to_send.append(create_alert_with_student_info('multiple_faces', 'Multiple people detected in exam area', 0.90))
+            # 🧠 Enhanced detection (every 15 frames)
+            if frame_count % behavior_interval == 0 and enhanced_detector:
+                if enhanced_detector.detect_phone_in_frame(scaled) or enhanced_detector.detect_object_near_ear(scaled):
+                    alerts_to_send.append(create_alert_with_student_info(
+                        'phone_detected', 'Phone or mobile device detected', 0.85))
+
+                if enhanced_detector.detect_speaking_in_frame(scaled):
+                    alerts_to_send.append(create_alert_with_student_info(
+                        'talking_detected', 'Talking or mouth movement detected', 0.75))
+
+                if enhanced_detector.detect_hand_movements(scaled):
+                    alerts_to_send.append(create_alert_with_student_info(
+                        'hand_movement_detected', 'Suspicious hand movements detected', 0.70))
+
+                if enhanced_detector.detect_head_movements(scaled):
+                    alerts_to_send.append(create_alert_with_student_info(
+                        'head_movement_detected', 'Excessive head movement detected', 0.65))
+
+                if detect_multiple_faces_in_frame(scaled):
+                    alerts_to_send.append(create_alert_with_student_info(
+                        'multiple_faces', 'Multiple people detected in exam area', 0.90))
+
                 if not current_detected_student and student_encodings_cache:
-                    if frame_count % 150 == 0:
-                        alerts_to_send.append(create_alert_with_student_info('no_student_detected', 'No registered student detected in exam area', 0.80))
+                    if frame_count % student_check_interval == 0:
+                        alerts_to_send.append(create_alert_with_student_info(
+                            'no_student_detected', 'No registered student detected in exam area', 0.80))
 
             for alert in alerts_to_send:
                 socketio.emit('new_alert', alert)
 
+            # 📷 Send annotated frame every 3rd frame
             if frame_count % 3 == 0:
                 try:
                     display_frame = frame.copy()
                     detection_info = {}
 
                     try:
-                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        boxes, _ = mtcnn_detector.detect(rgb_frame)
+                        rgb = cv2.cvtColor(scaled, cv2.COLOR_BGR2RGB)
+                        boxes, _ = mtcnn_detector.detect(rgb)
                         face_locations = [] if boxes is None else [
-                            (int(y1), int(x2), int(y2), int(x1)) for x1, y1, x2, y2 in boxes
+                            (int(y1*2), int(x2*2), int(y2*2), int(x1*2)) for x1, y1, x2, y2 in boxes
                         ]
+
                         for (top, right, bottom, left) in face_locations:
                             cv2.rectangle(display_frame, (left, top), (right, bottom), (0, 255, 0), 2)
                             if current_detected_student:
                                 label = f"{current_detected_student['name']} ({current_detected_student['confidence']:.2f})"
-                                cv2.putText(display_frame, label, (left, top - 10), 
+                                cv2.putText(display_frame, label, (left, top - 10),
                                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                         detection_info['faces'] = len(face_locations)
                     except Exception as e:
-                        print(f"Error drawing face detection: {e}")
+                        print(f"[draw face detection] {e}")
                         detection_info['faces'] = 0
 
-                    if enhanced_detector and frame_count % 15 == 0:
+                    if enhanced_detector and frame_count % behavior_interval == 0:
                         detection_info.update({
-                            'phone': enhanced_detector.detect_phone_in_frame(frame),
-                            'speaking': enhanced_detector.detect_speaking_in_frame(frame),
-                            'hand_movement': enhanced_detector.detect_hand_movements(frame),
-                            'head_movement': enhanced_detector.detect_head_movements(frame)
+                            'phone': enhanced_detector.detect_phone_in_frame(scaled),
+                            'speaking': enhanced_detector.detect_speaking_in_frame(scaled),
+                            'hand_movement': enhanced_detector.detect_hand_movements(scaled),
+                            'head_movement': enhanced_detector.detect_head_movements(scaled)
                         })
 
+                    # Status overlays
                     status_y = 30
                     if detection_info.get('phone'):
                         cv2.putText(display_frame, "PHONE DETECTED", (10, status_y),
@@ -338,25 +358,26 @@ def video_processing_thread():
                         cv2.putText(display_frame, "HEAD MOVEMENT", (10, status_y),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
 
-                    _, buffer = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    _, buffer = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
                     frame_data = base64.b64encode(buffer).decode('utf-8')
+
                     socketio.emit('video_frame', {
                         'frame': frame_data,
                         'detections': detection_info,
                         'student_info': current_detected_student,
                         'timestamp': datetime.now().strftime('%H:%M:%S')
                     })
-
                 except Exception as e:
-                    print(f"Error processing frame: {e}")
+                    print(f"[frame send error] {e}")
 
-            time.sleep(0.033)
+            time.sleep(0.01)
 
         except Exception as e:
-            print(f"Error in video processing thread: {e}")
+            print(f"[video thread error] {e}")
             break
 
     print("Video processing thread ended")
+
 
 @app.route('/')
 def index():
@@ -403,11 +424,19 @@ def start_monitoring():
         print("Enhanced detector and MTCNN initialized")
 
         # Initialize and start threaded monitor
-        threaded_monitor = ThreadedMonitor()
+        # threaded_monitor = ThreadedMonitor()
+        # threaded_monitor.start()
+
+        # monitoring_active = True
+        # video_thread = threading.Thread(target=video_processing_thread, daemon=True)
+        # video_thread.start()
+
+        threaded_monitor = ThreadedMonitor(scale=1.0)
         threaded_monitor.start()
 
+        # Then start the video processing thread using frames from threaded_monitor
         monitoring_active = True
-        video_thread = threading.Thread(target=video_processing_thread, daemon=True)
+        video_thread = threading.Thread(target=video_processing_thread)
         video_thread.start()
 
         return jsonify({'success': True, 'message': 'Monitoring started with threaded video feed'})
