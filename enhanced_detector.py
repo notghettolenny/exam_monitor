@@ -51,7 +51,7 @@ class EnhancedDetector:
         self.head_positions = deque(maxlen=10)
         
         # Thresholds
-        self.MOUTH_OPEN_THRESHOLD = 0.02
+        self.MOUTH_OPEN_THRESHOLD = 0.2
         self.HAND_MOVEMENT_THRESHOLD = 0.15
         self.PHONE_COLOR_RANGES = [
             # Common phone colors in HSV

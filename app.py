@@ -76,7 +76,7 @@ class UserManager:
         try:
             conn = sqlite3.connect('users.db')
             cursor = conn.cursor()
-            password_hash = generate_password_hash(password)
+            password_hash = generate_password_hash(password,method='pbkdf2:sha256')
             cursor.execute('''
                 INSERT INTO users (username, password_hash, role)
                 VALUES (?, ?, ?)
@@ -423,14 +423,6 @@ def start_monitoring():
         mtcnn_detector = MTCNN(keep_all=True, device=device)
         print("Enhanced detector and MTCNN initialized")
 
-        # Initialize and start threaded monitor
-        # threaded_monitor = ThreadedMonitor()
-        # threaded_monitor.start()
-
-        # monitoring_active = True
-        # video_thread = threading.Thread(target=video_processing_thread, daemon=True)
-        # video_thread.start()
-
         threaded_monitor = ThreadedMonitor(scale=1.0)
         threaded_monitor.start()
 
@@ -474,6 +466,16 @@ def monitoring_status():
         'enhanced_detection': enhanced_detector is not None
     })
 
+@app.route('/api/get_students')
+def get_students():
+    """Get all students"""
+    if 'username' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    students = student_manager.get_all_students()
+    return jsonify({'students': students})
+
+
 @app.route('/api/upload_students', methods=['POST'])
 def upload_students():
     if 'username' not in session:
@@ -497,13 +499,12 @@ def upload_students():
                 student_id, name = name_part.split('_', 1) if '_' in name_part else (name_part, name_part)
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(file_path)
-
                 image = face_recognition.load_image_file(file_path)
                 face_encodings = face_recognition.face_encodings(image)
                 if not face_encodings:
+                    print('breaks here')
                     errors.append(f"No face found in {filename}")
                     continue
-
                 face_encoding = face_encodings[0]
                 if student_manager.add_student(student_id, name, file_path, face_encoding):
                     uploaded_count += 1
