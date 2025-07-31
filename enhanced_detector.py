@@ -51,7 +51,7 @@ class EnhancedDetector:
         self.head_positions = deque(maxlen=10)
         
         # Thresholds
-        self.MOUTH_OPEN_THRESHOLD = 0.02
+        self.MOUTH_OPEN_THRESHOLD = 0.2
         self.HAND_MOVEMENT_THRESHOLD = 0.15
         self.PHONE_COLOR_RANGES = [
             # Common phone colors in HSV
@@ -65,10 +65,14 @@ class EnhancedDetector:
         try:
             # Convert to HSV for better color detection
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            
+
+            # Skip detection in extremely dark frames to reduce false positives
+            if hsv[..., 2].mean() < 40:
+                return False
+
             # Create masks for common phone colors
             phone_mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
-            
+
             for lower, upper in self.PHONE_COLOR_RANGES:
                 lower = np.array(lower, dtype=np.uint8)
                 upper = np.array(upper, dtype=np.uint8)
@@ -89,14 +93,32 @@ class EnhancedDetector:
                 if 1000 < area < 50000:
                     # Get bounding rectangle
                     x, y, w, h = cv2.boundingRect(contour)
-                    
+
+                    # Skip very dark candidate regions
+                    region_v = hsv[y:y + h, x:x + w, 2]
+                    if region_v.size > 0 and region_v.mean() < 60:
+                        continue
+
+                    # Additional rectangularity checks to reduce false positives
+                    rect_area = float(w * h)
+                    if rect_area <= 0:
+                        continue
+                    extent = area / rect_area
+                    if extent < 0.6:
+                        continue
+
+                    peri = cv2.arcLength(contour, True)
+                    approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+                    if len(approx) < 4 or len(approx) > 6:
+                        continue
+
                     # Check aspect ratio (phones are typically rectangular)
                     aspect_ratio = w / h
                     if 0.3 < aspect_ratio < 0.8:  # Portrait phone
                         # Check if it's in hand area (upper part of frame)
                         if y < frame.shape[0] * 0.7:  # Upper 70% of frame
                             return True
-                    elif 1.2 < aspect_ratio < 3.0:  # Landscape phone
+                    elif 1.0 < aspect_ratio < 3.5:  # Landscape phone
                         if y < frame.shape[0] * 0.7:
                             return True
             

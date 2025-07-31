@@ -2,6 +2,8 @@ import cv2
 import pickle
 import face_recognition
 import numpy as np
+import torch
+from facenet_pytorch import MTCNN
 
 # Load the saved student database
 db_path = "students.pkl"
@@ -28,6 +30,9 @@ for sid, name in zip(known_ids, known_names):
 cap = cv2.VideoCapture(0)
 print("\n📸 Starting webcam. Press Q to quit.")
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+mtcnn = MTCNN(keep_all=True, device=device)
+
 tolerance = 0.6  # You can raise this to 0.65 or 0.7 if matches fail
 
 while cap.isOpened():
@@ -36,7 +41,10 @@ while cap.isOpened():
         break
 
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    face_locations = face_recognition.face_locations(rgb)
+    boxes, _ = mtcnn.detect(rgb)
+    face_locations = [] if boxes is None else [
+        (int(y1), int(x2), int(y2), int(x1)) for x1, y1, x2, y2 in boxes
+    ]
     face_encodings = face_recognition.face_encodings(rgb, face_locations)
 
     for face_encoding, location in zip(face_encodings, face_locations):
