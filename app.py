@@ -473,8 +473,10 @@ def video_processing_thread():
         try:
             ret, frame = cap.read()
             if not ret:
+                # Transient camera failure - retry instead of exiting
                 print("Failed to read frame from camera")
-                break
+                time.sleep(0.1)
+                continue
             
             frame_count += 1
             alerts_to_send = []
