@@ -3,6 +3,7 @@ import numpy as np
 import face_recognition
 import mediapipe as mp
 import torch
+from facenet_pytorch import MTCNN
 import json
 import os
 import time
@@ -73,6 +74,8 @@ class FaceRecognitionModule:
         self.known_students: Dict[str, StudentData] = {}
         self.attendance_log: Dict[str, float] = {}
         self.unknown_faces_buffer = deque(maxlen=100)
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.mtcnn = MTCNN(keep_all=True, device=device)
         
     def load_student_database(self, database_path: str):
         """Load pre-enrolled student face encodings"""
@@ -114,11 +117,13 @@ class FaceRecognitionModule:
         else:
             small_frame = rgb_frame
 
-        # Find face locations and encodings on the scaled frame
-        small_locations = face_recognition.face_locations(small_frame)
-        face_encodings = face_recognition.face_encodings(small_frame, small_locations)
-
-        # Scale face locations back to original frame size
+        # Detect faces using MTCNN for better performance
+        boxes, _ = self.mtcnn.detect(small_frame)
+        if boxes is None:
+            return []
+        small_locations = [
+            (int(y1), int(x2), int(y2), int(x1)) for x1, y1, x2, y2 in boxes
+        ]
         face_locations = [
             (
                 int(top / self.config.face_recognition_scale),
@@ -128,6 +133,7 @@ class FaceRecognitionModule:
             )
             for top, right, bottom, left in small_locations
         ]
+        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
         
         results = []
         
