@@ -3,6 +3,7 @@ import numpy as np
 import face_recognition
 import mediapipe as mp
 import torch
+from facenet_pytorch import MTCNN
 import json
 import os
 import time
@@ -61,6 +62,9 @@ class ExamMonitorConfig:
         # Performance settings
         self.frame_skip = 2  # process every N frames
         self.max_faces_per_frame = 10
+        # Scale factor for face recognition processing (0.25 reduces resolution
+        # to 25% for faster computation)
+        self.face_recognition_scale = 0.25
 
 class FaceRecognitionModule:
     """Handles student attendance and face verification"""
@@ -70,6 +74,8 @@ class FaceRecognitionModule:
         self.known_students: Dict[str, StudentData] = {}
         self.attendance_log: Dict[str, float] = {}
         self.unknown_faces_buffer = deque(maxlen=100)
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.mtcnn = MTCNN(keep_all=True, device=device)
         
     def load_student_database(self, database_path: str):
         """Load pre-enrolled student face encodings"""
@@ -99,31 +105,67 @@ class FaceRecognitionModule:
         
     def recognize_faces(self, frame: np.ndarray) -> List[Tuple[str, float, Tuple[int, int, int, int]]]:
         """Recognize faces in frame and return student IDs with bounding boxes"""
-        # Find face locations and encodings
-        face_locations = face_recognition.face_locations(frame)
-        face_encodings = face_recognition.face_encodings(frame, face_locations)
+        # Convert to RGB and optionally scale for faster processing
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        if self.config.face_recognition_scale != 1.0:
+            small_frame = cv2.resize(
+                rgb_frame,
+                (0, 0),
+                fx=self.config.face_recognition_scale,
+                fy=self.config.face_recognition_scale,
+            )
+        else:
+            small_frame = rgb_frame
+
+        # Detect faces using MTCNN for better performance
+        boxes, _ = self.mtcnn.detect(small_frame)
+        if boxes is None:
+            return []
+        small_locations = [
+            (int(y1), int(x2), int(y2), int(x1)) for x1, y1, x2, y2 in boxes
+        ]
+        face_locations = [
+            (
+                int(top / self.config.face_recognition_scale),
+                int(right / self.config.face_recognition_scale),
+                int(bottom / self.config.face_recognition_scale),
+                int(left / self.config.face_recognition_scale),
+            )
+            for top, right, bottom, left in small_locations
+        ]
+        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
         
         results = []
         
+        known_ids = list(self.known_students.keys())
+        known_encodings = [student.face_encoding for student in self.known_students.values()]
+
         for face_encoding, face_location in zip(face_encodings, face_locations):
-            # Compare with known students
-            matches = face_recognition.compare_faces(
-                [student.face_encoding for student in self.known_students.values()],
-                face_encoding,
-                tolerance=self.config.face_recognition_tolerance
-            )
-            
-            face_distances = face_recognition.face_distance(
-                [student.face_encoding for student in self.known_students.values()],
-                face_encoding
-            )
-            
-            best_match_index = np.argmin(face_distances)
+            if known_encodings:
+                # Compare with known students
+                matches = face_recognition.compare_faces(
+                    known_encodings,
+                    face_encoding,
+                    tolerance=self.config.face_recognition_tolerance,
+                )
+
+                face_distances = face_recognition.face_distance(
+                    known_encodings, face_encoding
+                )
+                best_match_index = int(np.argmin(face_distances))
+            else:
+                matches = []
+                face_distances = []
+                best_match_index = 0
             student_id = "unknown"
             confidence = 0.0
             
-            if matches[best_match_index] and face_distances[best_match_index] < self.config.unknown_face_threshold:
-                student_id = list(self.known_students.keys())[best_match_index]
+            if (
+                matches
+                and matches[best_match_index]
+                and face_distances[best_match_index] < self.config.unknown_face_threshold
+            ):
+                student_id = known_ids[best_match_index]
                 confidence = 1.0 - face_distances[best_match_index]
                 
                 # Log attendance
